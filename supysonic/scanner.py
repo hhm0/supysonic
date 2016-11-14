@@ -53,8 +53,9 @@ def compile_concat(compile, concat, state):
 	return statement % (left, right)
 
 class Scanner:
-	def __init__(self, store):
+	def __init__(self, store, force = False):
 		self.__store = store
+		self.__force = force
 
 		self.__added_artists = 0
 		self.__added_albums  = 0
@@ -101,12 +102,16 @@ class Scanner:
 
 	def finish(self):
 		for album in [ a for a in self.__albums_to_check if not a.tracks.count() ]:
+			self.__store.find(StarredAlbum, StarredAlbum.starred_id == album.id).remove()
+
 			self.__artists_to_check.add(album.artist)
 			self.__store.remove(album)
 			self.__deleted_albums += 1
 		self.__albums_to_check.clear()
 
-		for artist in [ a for a in self.__artists_to_check if not a.albums.count() ]:
+		for artist in [ a for a in self.__artists_to_check if not a.albums.count() and not a.tracks.count() ]:
+			self.__store.find(StarredArtist, StarredArtist.starred_id == artist.id).remove()
+
 			self.__store.remove(artist)
 			self.__deleted_artists += 1
 		self.__artists_to_check.clear()
@@ -117,6 +122,9 @@ class Scanner:
 				continue
 
 			if not folder.tracks.count() and not folder.children.count():
+				self.__store.find(StarredFolder, StarredFolder.starred_id == folder.id).remove()
+				self.__store.find(RatingFolder, RatingFolder.rated_id == folder.id).remove()
+
 				self.__folders_to_check.add(folder.parent)
 				self.__store.remove(folder)
 
@@ -131,7 +139,7 @@ class Scanner:
 		tr = self.__store.find(Track, Track.path == path).one()
 		add = False
 		if tr:
-			if not int(os.path.getmtime(path)) > tr.last_modification:
+			if not self.__force and not int(os.path.getmtime(path)) > tr.last_modification:
 				return
 
 			tag = self.__try_load_tag(path)
@@ -147,43 +155,59 @@ class Scanner:
 			tr.path = path
 			add = True
 
+		artist      = self.__try_read_tag(tag, 'artist', '')
+		album       = self.__try_read_tag(tag, 'album', '')
+		albumartist = self.__try_read_tag(tag, 'albumartist', artist)
+
 		tr.disc     = self.__try_read_tag(tag, 'discnumber',  1, lambda x: int(x[0].split('/')[0]))
 		tr.number   = self.__try_read_tag(tag, 'tracknumber', 1, lambda x: int(x[0].split('/')[0]))
 		tr.title    = self.__try_read_tag(tag, 'title', '')
 		tr.year     = self.__try_read_tag(tag, 'date', None, lambda x: int(x[0].split('-')[0]))
 		tr.genre    = self.__try_read_tag(tag, 'genre')
 		tr.duration = int(tag.info.length)
-		if not add:
-			old_album = tr.album
-			new_album = self.__find_album(self.__try_read_tag(tag, 'artist', ''), self.__try_read_tag(tag, 'album', ''))
-			if old_album.id != new_album.id:
-				tr.album = new_album
-				self.__albums_to_check.add(old_album)
+
 		tr.bitrate  = (tag.info.bitrate if hasattr(tag.info, 'bitrate') else int(os.path.getsize(path) * 8 / tag.info.length)) / 1000
 		tr.content_type = get_mime(os.path.splitext(path)[1][1:])
 		tr.last_modification = os.path.getmtime(path)
 
+		tralbum = self.__find_album(albumartist, album)
+		trartist = self.__find_artist(artist)
+
 		if add:
-			tralbum = self.__find_album(self.__try_read_tag(tag, 'artist', ''), self.__try_read_tag(tag, 'album', ''))
 			trroot = self.__find_root_folder(path)
 			trfolder = self.__find_folder(path)
 
 			# Set the references at the very last as searching for them will cause the added track to be flushed, even if
 			# it is incomplete, causing not null constraints errors.
 			tr.album = tralbum
+			tr.artist = trartist
 			tr.folder = trfolder
 			tr.root_folder = trroot
 
 			self.__store.add(tr)
 			self.__added_tracks += 1
+		else:
+			if tr.album.id != tralbum.id:
+				self.__albums_to_check.add(tr.album)
+				tr.album = tralbum
+
+			if tr.artist.id != trartist.id:
+				self.__artists_to_check.add(tr.artist)
+				tr.artist = trartist
 
 	def remove_file(self, path):
 		tr = self.__store.find(Track, Track.path == path).one()
 		if not tr:
 			return
 
+		self.__store.find(StarredTrack, StarredTrack.starred_id == tr.id).remove()
+		self.__store.find(RatingTrack, RatingTrack.rated_id == tr.id).remove()
+		self.__store.find(PlaylistTrack, PlaylistTrack.track_id == tr.id).remove()
+		self.__store.find(User, User.last_play_id == tr.id).set(User.last_play_id = None)
+
 		self.__folders_to_check.add(tr.folder)
 		self.__albums_to_check.add(tr.album)
+		self.__artists_to_check.add(tr.artist)
 		self.__store.remove(tr)
 		self.__deleted_tracks += 1
 
