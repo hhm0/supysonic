@@ -235,6 +235,8 @@ class Scanner:
 		ar = self.__find_artist(artist)
 		al = ar.albums.find(name = album).one()
 		if al:
+			if al.name != album:
+				al.name = album
 			return al
 
 		al = Album()
@@ -249,6 +251,8 @@ class Scanner:
 	def __find_artist(self, artist):
 		ar = self.__store.find(Artist, Artist.name == artist).one()
 		if ar:
+			if ar.name != artist:
+				ar.name = artist
 			return ar
 
 		ar = Artist()
