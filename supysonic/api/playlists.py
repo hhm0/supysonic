@@ -23,7 +23,7 @@ from storm.expr import Or
 import uuid
 from supysonic.web import app, store
 from supysonic.db import Playlist, User, Track
-from . import get_entity
+from . import get_entity, ordered_unique
 
 @app.route('/rest/getPlaylists.view', methods = [ 'GET', 'POST' ])
 def list_playlists():
@@ -56,7 +56,7 @@ def create_playlist():
 	songs = request.values.getlist('songId')
 	try:
 		playlist_id = uuid.UUID(playlist_id) if playlist_id else None
-		songs = set(map(uuid.UUID, songs))
+		songs = ordered_unique(map(uuid.UUID, songs))
 	except:
 		return request.error_formatter(0, 'Invalid parameter')
 
@@ -116,7 +116,7 @@ def update_playlist():
 	name, comment, public = map(request.values.get, [ 'name', 'comment', 'public' ])
 	to_add, to_remove = map(request.values.getlist, [ 'songIdToAdd', 'songIndexToRemove' ])
 	try:
-		to_add = set(map(uuid.UUID, to_add))
+		to_add = ordered_unique(map(uuid.UUID, to_add))
 		to_remove = sorted(set(map(int, to_remove)))
 	except:
 		return request.error_formatter(0, 'Invalid parameter')

@@ -192,6 +192,15 @@ def get_entity(req, ent, param = 'id'):
 
 	return True, entity
 
+def ordered_unique(items):
+    seen = set()
+    outputs = []
+    for i in items:
+        if i not in outputs:
+            seen.add(i)
+            outputs.append(i)
+    return outputs
+
 from .system import *
 from .browse import *
 from .user import *
