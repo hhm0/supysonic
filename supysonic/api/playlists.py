@@ -56,7 +56,7 @@ def create_playlist():
 	songs = request.values.getlist('songId')
 	try:
 		playlist_id = uuid.UUID(playlist_id) if playlist_id else None
-		songs = set(map(uuid.UUID, songs))
+		songs = map(uuid.UUID, songs)
 	except:
 		return request.error_formatter(0, 'Invalid parameter')
 
@@ -116,7 +116,7 @@ def update_playlist():
 	name, comment, public = map(request.values.get, [ 'name', 'comment', 'public' ])
 	to_add, to_remove = map(request.values.getlist, [ 'songIdToAdd', 'songIndexToRemove' ])
 	try:
-		to_add = set(map(uuid.UUID, to_add))
+		to_add = map(uuid.UUID, to_add)
 		to_remove = sorted(set(map(int, to_remove)))
 	except:
 		return request.error_formatter(0, 'Invalid parameter')
